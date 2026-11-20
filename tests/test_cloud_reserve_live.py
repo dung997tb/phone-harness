@@ -351,16 +351,15 @@ class LiveReservations(unittest.TestCase):
         self.local.pay(made[1])
         self.reserve()
 
-    def test_an_android_is_reserved_before_it_has_a_price(self):
-        if self.local.state.get("android_priced"):
-            self.skipTest("this local phone-cloud was started with --android-priced")
+    def test_an_android_is_not_reserved_and_the_api_is_never_asked(self):
         r = self.run_cli("reserve", "--type", "android", "--plan", "monthly", "--use-case", USE_CASE)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("first month  price confirmed before handover", r.stdout)
-        [made] = json.loads(self.run_cli("reservations", "--json").stdout)
-        self.assertEqual((made["phone_type"], made["quote"]["priced"], made["quote"]["lines"]),
-                         ("android", False, []))
-        self.assertIn(f"deposit      {_amount(made['quote']['deposit']['total_cents'])} due now", r.stdout)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(r.stderr.splitlines()[0],
+                         "Reservations are for iPhones only (with or without eSIM). "
+                         "Cloud Android emulators are on the $20 plan and are not reserved.")
+        self.assertEqual(r.stdout, "")
+        # Refused here, before the API: the account has no reservation, not even an unpaid one.
+        self.assertEqual(json.loads(self.run_cli("reservations", "--json").stdout), [])
 
     def test_a_checkout_that_ran_out_is_cancelled_with_nothing_charged(self):
         made = self.reserve()

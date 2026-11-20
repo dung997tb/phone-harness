@@ -90,6 +90,8 @@ That reaches the default phone. If it fails, use the sections below.
   reserve`, for a $20 per phone refundable deposit: it prints a quote, which
   is authoritative, and a link where the user pays
   ([setup/cloud.md](https://github.com/phone-harness/phone-harness/blob/main/setup/cloud.md)).
+  Reservations are for iPhones only (with or without eSIM). Cloud Android
+  emulators are on the $20 plan and are not reserved.
 
 No uv? `pip install phone-harness` works too. Upgrade that install with
 `pip install -U phone-harness` (what `phone-harness update` prints for it).

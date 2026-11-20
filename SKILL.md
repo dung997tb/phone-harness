@@ -368,7 +368,7 @@ into notes or output.
 
 ## Reserving a cloud phone
 
-An account gets a cloud iPhone, or more phones, by reserving them. A
+An account gets a cloud iPhone, or more of them, by reserving them. A
 reservation is a place in a queue, held by a $20 per phone refundable deposit.
 The quote the command prints is authoritative: tell the user the amounts in
 it. You can start a reservation. Only the user can pay for it.
@@ -384,8 +384,10 @@ phone-harness cloud reservations cancel ID     # says what it would refund; --ye
 - **Signed in first.** These commands need `phone-harness cloud login`, or
   `PHONE_HARNESS_API_KEY`. A user with no account, or who will not sign in,
   can reserve on the website instead: phone-harness.com/get-a-phone.
-- **Ask first, and send the user's own answers.** `--type` is `iphone`,
-  `iphone-esim` (a real number) or `android`. `--plan` is `monthly` or
+- **Which phones.** Reservations are for iPhones only (with or without
+  eSIM). Cloud Android emulators are on the $20 plan and are not reserved.
+- **Ask first, and send the user's own answers.** `--type` is `iphone`, or
+  `iphone-esim` for one with an eSIM (a real number). `--plan` is `monthly` or
   `annual`. `--qty` is 1 to 50, default 1. `--use-case` is what they want the
   phones for, in their words. Do not make up a use case, a name or a number.
 - **You never pay.** `cloud reserve` prints a Stripe Checkout link. Give it to

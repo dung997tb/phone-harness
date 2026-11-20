@@ -12,6 +12,7 @@ sys.path.insert(0, str(SRC))
 from phone_harness.run import _skill_text, _write_utf8  # noqa: E402
 from phone_harness.android import CLI_USAGE as ANDROID_USAGE  # noqa: E402
 from phone_harness.cloud import CLI_USAGE as CLOUD_USAGE  # noqa: E402
+from phone_harness.cloud import IPHONES_ONLY  # noqa: E402
 from phone_harness.config import CLI_USAGE as CONFIG_USAGE
 from phone_harness.run import USAGE  # noqa: E402
 
@@ -73,6 +74,8 @@ class SkillOutput(unittest.TestCase):
         section = _skill_text().split("\n## Reserving a cloud phone\n", 1)[1].split("\n## ", 1)[0]
         text = " ".join(section.split())
         for rule in (
+                "**Which phones.** " + IPHONES_ONLY,             # the sentence `cloud reserve` refuses an Android with
+                "`--type` is `iphone`, or `iphone-esim` for one with an eSIM",
                 "**Signed in first.**", "phone-harness cloud login", "PHONE_HARNESS_API_KEY",
                 "phone-harness.com/get-a-phone",                       # with no account: the website
                 "$20 per phone refundable deposit", "quote the command prints is authoritative",
@@ -86,6 +89,7 @@ class SkillOutput(unittest.TestCase):
                 "**The website has no list.**", "`cloud reservations` is the list",
                 "Cancelling one does not free a place"):
             self.assertIn(rule, text)
+        self.assertNotIn("`android`", text)                # not a --type
 
     def test_screenshot_prints_the_path_it_returns(self):
         import contextlib

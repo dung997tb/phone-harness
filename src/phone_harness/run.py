@@ -135,7 +135,7 @@ _RESERVATION_FLAGS = frozenset({
     "--type", "--plan", "--qty", "--quantity", "--use-case", "--first-name", "--last-name",
     "--idempotency-key", "--open", "--json", "--yes", "--help", "-h"})
 _RESERVATION_WORDS = frozenset({
-    "cancel", "iphone", "iphone-esim", "iphone_esim", "android", "monthly", "annual"})
+    "cancel", "iphone", "iphone-esim", "iphone_esim", "monthly", "annual"})
 
 
 def _reservation_argv(words):

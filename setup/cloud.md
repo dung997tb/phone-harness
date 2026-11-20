@@ -49,7 +49,7 @@ and logins; if an app asks for an Apple ID or any sign-in, ask the user.
 
 ## Reserve a phone
 
-An account with no cloud iPhone yet, or one that needs more phones, reserves
+An account with no cloud iPhone yet, or one that needs more of them, reserves
 them:
 
 ```bash
@@ -59,7 +59,7 @@ phone-harness cloud reservations              # status and place in the queue
 phone-harness cloud reservations cancel ID    # leave the queue; the deposit is refunded
 ```
 
-`--type` is `iphone`, `iphone-esim` or `android`; `--plan` is `monthly` or
+`--type` is `iphone` or `iphone-esim`; `--plan` is `monthly` or
 `annual`; `--qty` is 1 to 50. Reserving takes a $20 per phone refundable
 deposit. The command prints a quote, which is authoritative, and a Stripe
 Checkout link. The user opens the link and pays (`--open` opens it for them).
@@ -68,6 +68,8 @@ reserved. The plan starts when a phone is handed over, and the deposit comes
 off its first bill. The reservation carries the account's name;
 `--first-name` and `--last-name` put another one on it.
 
+- Reservations are for iPhones only (with or without eSIM). Cloud Android
+  emulators are on the $20 plan and are not reserved.
 - These commands need a signed-in account (`cloud login`, or
   `PHONE_HARNESS_API_KEY`). Without one, reserve at phone-harness.com/get-a-phone.
 - The queue is in the order deposits were paid. Nothing moves a place up.

@@ -1754,17 +1754,22 @@ def _history(args):
 
 # --- reservations ------------------------------------------------------------
 #
-# Asking for a phone the account does not have yet. `cloud reserve` sends what
-# is wanted and gets back a quote and a Stripe Checkout link for a refundable
-# deposit. A person pays that in a browser: this CLI holds no card and never
-# pays. Until the deposit is paid the reservation holds no place in the queue,
-# so nothing here says "reserved" before the API says `queued`.
+# Asking for an iPhone the account does not have yet. `cloud reserve` sends
+# what is wanted and gets back a quote and a Stripe Checkout link for a
+# refundable deposit. A person pays that in a browser: this CLI holds no card
+# and never pays. Until the deposit is paid the reservation holds no place in
+# the queue, so nothing here says "reserved" before the API says `queued`.
 #
-# Every amount printed is one the API sent. No price is written in this file.
+# Every amount printed about a reservation is one the API sent. The one figure
+# written in this file is in IPHONES_ONLY, and is not a reservation's.
 
-# What --type takes, and the API's word for it.
-RESERVE_TYPES = {"iphone": "iphone", "iphone-esim": "iphone_esim",
-                 "iphone_esim": "iphone_esim", "android": "android"}
+# What --type takes, and the API's word for it. Only iPhones are reserved.
+RESERVE_TYPES = {"iphone": "iphone", "iphone-esim": "iphone_esim", "iphone_esim": "iphone_esim"}
+# What someone who asks to reserve an Android is told. The docs and the MCP
+# server say it in the same words; tests/test_pricing_copy.py holds the docs
+# to them.
+IPHONES_ONLY = ("Reservations are for iPhones only (with or without eSIM). "
+                "Cloud Android emulators are on the $20 plan and are not reserved.")
 RESERVE_PLANS = ("monthly", "annual")
 RESERVE_MAX_QUANTITY = 50          # the API's limit for one reservation
 RESERVE_MAX_USE_CASE = 2000        # and for the free text
@@ -1776,12 +1781,15 @@ _RESERVATION_ID = re.compile(r"rsv_[a-f0-9]{24}")
 # other 404 may be an API with no reservation routes; see _reservations_live.
 _NO_SUCH_RESERVATION = "No such reservation"
 _IDEMPOTENCY_KEY = re.compile(r"[A-Za-z0-9_-]{16,128}")
-_TYPE_WORDS = {"iphone": "iphone", "iphone_esim": "iphone-esim", "android": "android"}
-_TYPE_LABELS = {"iphone": "iPhone", "iphone_esim": "iPhone with eSIM", "android": "Android"}
+# The API's phone types as they are shown. One these do not name (a
+# reservation from when another phone was offered) shows as the API's own
+# word, and can be cancelled like any other.
+_TYPE_WORDS = {"iphone": "iphone", "iphone_esim": "iphone-esim"}
+_TYPE_LABELS = {"iphone": "iPhone", "iphone_esim": "iPhone with eSIM"}
 _TIER_WORDS = {"intro": "intro price, once per customer", "standard": "standard price"}
 
 RESERVE_USAGE = (
-    "Usage: phone-harness cloud reserve --type iphone|iphone-esim|android --plan monthly|annual\n"
+    "Usage: phone-harness cloud reserve --type iphone|iphone-esim --plan monthly|annual\n"
     "         [--qty N] --use-case TEXT [--first-name NAME] [--last-name NAME]\n"
     "         [--open] [--json] [--idempotency-key KEY]")
 RESERVATIONS_USAGE = (
@@ -2079,8 +2087,10 @@ def _reserve(args):
     as_json, open_it = _flag(args, "--json"), _flag(args, "--open")
     if args:
         sys.exit(RESERVE_USAGE)
+    if kind is not None and kind.lower().startswith("android"):
+        sys.exit(f"{IPHONES_ONLY}\n{RESERVE_USAGE}")
     if kind not in RESERVE_TYPES:
-        sys.exit(f"--type must be iphone, iphone-esim or android, not {kind!r}.\n{RESERVE_USAGE}"
+        sys.exit(f"--type must be iphone or iphone-esim, not {kind!r}.\n{RESERVE_USAGE}"
                  if kind is not None else f"--type is required.\n{RESERVE_USAGE}")
     if plan not in RESERVE_PLANS:
         sys.exit(f"--plan must be monthly or annual, not {plan!r}.\n{RESERVE_USAGE}"
@@ -2278,10 +2288,10 @@ CLI_USAGE = """Usage:
   phone-harness cloud phone [reset --yes]      the saved Android. reset --yes wipes its stored state
   phone-harness cloud keys [create [LABEL] | revoke HASH]   API keys, for CI
   phone-harness cloud history [-n NUM] [--json]
-  phone-harness cloud reserve --type iphone|iphone-esim|android --plan monthly|annual
+  phone-harness cloud reserve --type iphone|iphone-esim --plan monthly|annual
                               [--qty N] --use-case TEXT [--first-name NAME] [--last-name NAME]
                               [--open] [--json] [--idempotency-key KEY]
-                                               ask for cloud phones (--qty 1 to 50, default 1) before the
+                                               ask for cloud iPhones (--qty 1 to 50, default 1) before the
                                                account has them. Prints the quote and a Stripe Checkout
                                                link for the refundable deposit; a person pays it in a
                                                browser, and nothing is held until then. --open opens
@@ -2409,12 +2419,13 @@ def _cloud_parsers():
 
     reserve = make(
         "reserve", RESERVE_USAGE[len("Usage: "):],
-        "Ask for cloud phones before the account has them. Prints the quote the API "
+        "Ask for cloud iPhones before the account has them. Prints the quote the API "
         "gives (the deposit due now, and the plan's first billing period at the intro "
         "and standard prices) and a Stripe Checkout link for the deposit, which is "
         "refundable while the reservation is queued. A person pays it in a browser: "
-        "this command never pays, and the reservation holds no place until it is paid.")
-    reserve.add_argument("--type", metavar="TYPE", help="iphone, iphone-esim, or android")
+        "this command never pays, and the reservation holds no place until it is paid. "
+        + IPHONES_ONLY)
+    reserve.add_argument("--type", metavar="TYPE", help="iphone, or iphone-esim for one with an eSIM")
     reserve.add_argument("--plan", metavar="PLAN", help="monthly or annual")
     reserve.add_argument("--qty", "--quantity", metavar="N",
                          help=f"how many phones, 1 to {RESERVE_MAX_QUANTITY} (default 1)")

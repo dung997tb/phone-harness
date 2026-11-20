@@ -35,8 +35,10 @@ KEY = "pck_reserve_test"
 USE_CASE = "Testing our listings app on a real iPhone."
 CHECKOUT = "https://checkout.stripe.com/c/pay/cs_test_"
 DEPOSIT = 2000
-# (standard, intro) cents for one phone for one billing period. A cloud
-# Android can be reserved before it has a price.
+# (standard, intro) cents for one phone for one billing period. For a short
+# while the API took a reservation for a cloud Android, before it had a price.
+# It refuses one now, and this CLI never asks, but one made then can still be
+# on the account.
 PRICES = {("iphone", "monthly"): (8000, 5000), ("iphone", "annual"): (76800, 48000),
           ("iphone_esim", "monthly"): (10000, 6500), ("iphone_esim", "annual"): (96000, 62400),
           ("android", "monthly"): (None, None), ("android", "annual"): (None, None)}
@@ -159,8 +161,11 @@ class FakeApi(BaseHTTPRequestHandler):
         key = self.headers.get("Idempotency-Key")
         if set(body) - {"first_name", "last_name", "email", "use_case", "phone_type", "plan", "quantity"}:
             return self._send(400, {"error": "Unknown field"})
+        if body.get("phone_type") == "android":
+            return self._send(400, {"error": "Cloud Android cannot be reserved. Choose a phone: iphone, iphone_esim",
+                                    "code": "phone_not_reservable"})
         if (body.get("phone_type"), body.get("plan")) not in PRICES:
-            return self._send(400, {"error": "Choose a phone: iphone, iphone_esim, android"})
+            return self._send(400, {"error": "Choose a phone: iphone, iphone_esim"})
         if type(body.get("quantity")) is not int or not 1 <= body["quantity"] <= 50:
             return self._send(400, {"error": "Choose between 1 and 50 phones"})
         if key in c.keys:
@@ -272,10 +277,10 @@ class Reserve(ReserveCase):
     def test_quantity_defaults_to_one_and_the_api_spelling_of_a_type_is_taken_too(self):
         spelled = self.run_cli("reserve", "--type=iphone_esim", "--plan=monthly", "--use-case=Two words")
         self.assertEqual(spelled.returncode, 0, spelled.stderr)
-        self.assertEqual(self.reserve("--quantity", "2", kind="android").returncode, 0)
+        self.assertEqual(self.reserve("--quantity", "2", kind="iphone-esim").returncode, 0)
         self.assertEqual([req[3] for req in FakeApi.requests], [
             {"phone_type": "iphone_esim", "plan": "monthly", "quantity": 1, "use_case": "Two words"},
-            {"phone_type": "android", "plan": "monthly", "quantity": 2, "use_case": USE_CASE}])
+            {"phone_type": "iphone_esim", "plan": "monthly", "quantity": 2, "use_case": USE_CASE}])
         twice = self.reserve("--qty", "1", "--qty", "2")               # said twice is not guessed at
         self.assertEqual(twice.returncode, 1)
         self.assertIn("Usage: phone-harness cloud reserve", twice.stderr)
@@ -303,7 +308,7 @@ class Reserve(ReserveCase):
             (["--type", "iphone", "--plan", "monthly", "--qty", "-3", *use], "between 1 and 50"),
             (["--type", "iphone", "--plan", "monthly", "--qty", "two", *use], "--qty must be a number"),
             (["--type", "iphone", "--plan", "monthly", "--qty", "1.5", *use], "--qty must be a number"),
-            (["--type", "ipad", "--plan", "monthly", *use], "--type must be iphone, iphone-esim or android"),
+            (["--type", "ipad", "--plan", "monthly", *use], "--type must be iphone or iphone-esim, not 'ipad'"),
             (["--plan", "monthly", *use], "--type is required"),
             (["--type", "iphone", "--plan", "weekly", *use], "--plan must be monthly or annual"),
             (["--type", "iphone", *use], "--plan is required"),
@@ -327,6 +332,28 @@ class Reserve(ReserveCase):
         self.assertEqual(FakeApi.requests, [])
         self.assertEqual(browser_recorder.recorder.urls(), [])
 
+    def test_an_android_is_not_reserved_and_nothing_is_sent(self):
+        said = ("Reservations are for iPhones only (with or without eSIM). "
+                "Cloud Android emulators are on the $20 plan and are not reserved.")
+        self.assertEqual(cloud.IPHONES_ONLY, said)
+        for kind in ("android", "Android", "android-emulator"):
+            with self.subTest(kind=kind):
+                r = self.reserve("--qty", "2", "--json", "--open", kind=kind)
+                self.assertEqual(r.returncode, 1, r.stdout)
+                self.assertEqual(r.stderr.splitlines()[0], said)
+                self.assertIn("Usage: phone-harness cloud reserve --type iphone|iphone-esim --plan", r.stderr)
+                self.assertEqual(r.stdout, "")
+        self.assertEqual(FakeApi.requests, [])
+        self.assertEqual(browser_recorder.recorder.urls(), [])
+        # Nothing the command says about itself offers one either.
+        self.assertEqual(sorted(set(cloud.RESERVE_TYPES.values())), ["iphone", "iphone_esim"])
+        self.assertNotIn("android", cloud.RESERVE_USAGE.lower())
+        self.assertIn("cloud reserve --type iphone|iphone-esim --plan monthly|annual", cloud.CLI_USAGE)
+        helped = self.run_cli("reserve", "--help")
+        self.assertEqual(helped.returncode, 0, helped.stderr)
+        self.assertIn(said, " ".join(helped.stdout.split()))
+        self.assertNotRegex(helped.stdout, r"(?i)\|android|or android")
+
     def test_the_quote_and_the_checkout_link_are_printed_and_nothing_is_called_reserved(self):
         r = self.reserve("--qty", "3")
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -344,18 +371,12 @@ class Reserve(ReserveCase):
         self.assertEqual(browser_recorder.recorder.urls(), [])       # only --open opens anything
         self.assertNotIn("\x1b", out)
 
-    def test_an_annual_quote_and_a_phone_with_no_price_yet(self):
+    def test_an_annual_quote(self):
         annual = self.reserve("--qty", "2", kind="iphone-esim", plan="annual")
         self.assertIn("2 x iPhone with eSIM, annual", annual.stdout)
         self.assertIn("first year   1 x $624.00 intro price, once per customer", annual.stdout)
         self.assertIn("1 x $960.00 standard price", annual.stdout)
         self.assertIn("$1,584.00 in all; $1,544.00 due at handover, after the deposit", annual.stdout)
-        android = self.reserve(kind="android")
-        self.assertEqual(android.returncode, 0, android.stderr)
-        self.assertIn("deposit      $20.00 due now (1 x $20.00), refundable in full while queued",
-                      android.stdout)
-        self.assertIn("first month  price confirmed before handover", android.stdout)
-        self.assertNotIn("in all", android.stdout)
 
     def test_json_prints_what_the_api_answered(self):
         r = self.reserve("--qty", "2", "--json")
@@ -472,6 +493,10 @@ class ReserveErrors(ReserveCase):
               "phone-harness cloud reservations"]),
             ((400, {"error": "A first name is too long"}, None), ["A first name is too long"]),
             ((400, {"error": "Choose between 1 and 50 phones"}, None), ["Choose between 1 and 50 phones"]),
+            # What the API says of a phone it does not reserve, should this CLI ever offer one it has dropped.
+            ((400, {"error": "Cloud Android cannot be reserved. Choose a phone: iphone, iphone_esim",
+                    "code": "phone_not_reservable"}, None),
+             ["Cloud Android cannot be reserved. Choose a phone: iphone, iphone_esim"]),
             ((403, {"error": "this sign-in can drive phones, not manage the account; use the dashboard "
                              "or an API key", "code": "scope_limited"}, None), ["use the dashboard or an API key"]),
             ((403, {"error": "account is blocked", "code": "account_blocked"}, None), ["blocked"]),
@@ -592,7 +617,9 @@ class Reservations(ReserveCase):
                                          "2 days ago"])
         self.assertEqual(cells[rid(2)], [rid(2), "iphone-esim", "annual", "1", "pending_payment", "-",
                                          "$20.00 due", "-"])
-        self.assertEqual(cells[rid(3)][4:], ["cancelled", "-", "$40.00 refunded", "5 days ago"])
+        # A phone this CLI does not reserve, made elsewhere: the API's own word for it.
+        self.assertEqual(cells[rid(3)][1:], ["android", "monthly", "2", "cancelled", "-", "$40.00 refunded",
+                                             "5 days ago"])
         self.assertEqual(cells[rid(4)][4:], ["queued", "1", "$60.00 paid, $40.00 refundable", "9 days ago"])
         self.assertEqual(cells[rid(5)][4:], ["granted", "-", "$20.00 credited", "30 days ago"])
         self.assertEqual(cells[rid(6)][4:], ["cancelling", "-", "$40.00 refund pending", "1 day ago"])
@@ -656,6 +683,21 @@ class Reservations(ReserveCase):
             self.assertEqual(missing.returncode, 1, unknown)
             self.assertIn("phone-harness cloud reservations` lists them", missing.stderr)
         self.assertIn(f"No reservation {rid(99)} on this account", self.run_cli("reservations", rid(99)).stderr)
+
+    def test_a_reservation_for_a_phone_this_cli_does_not_reserve_is_still_shown_and_cancelled(self):
+        # One made while an Android was still offered stays on the account.
+        # It has no price, so its quote is the deposit alone.
+        self.hold(reservation(1, "android", "monthly", 2, "queued", position=3, paid_days_ago=1))
+        one = self.run_cli("reservations", rid(1))
+        self.assertEqual(one.returncode, 0, one.stderr)
+        for line in ("status       queued", "phones       2 x android, monthly", "position     3 in the queue",
+                     "deposit      $40.00 paid", "first month  price confirmed before handover"):
+            self.assertIn(line, one.stdout)
+        self.assertNotIn("in all", one.stdout)
+        gone = self.run_cli("reservations", "cancel", rid(1), "--yes")
+        self.assertEqual(gone.returncode, 0, gone.stderr)
+        self.assertIn(f"Reservation {rid(1)} cancelled. $40.00 is on its way back to the card that paid.",
+                      gone.stdout)
 
     def test_usage_for_words_it_does_not_take(self):
         for args in (["reservations", rid(1), rid(2)], ["reservations", "cancel"],
@@ -850,7 +892,7 @@ class NoReservationsYet(ReserveCase):
         commands = {
             "reserve": (["reserve", "--type", "iphone", "--plan", "monthly", "--use-case", USE_CASE],
                         [("POST", "/reservations")]),
-            "reserve --json --open": (["reserve", "--type", "android", "--plan", "annual", "--qty", "3",
+            "reserve --json --open": (["reserve", "--type", "iphone-esim", "--plan", "annual", "--qty", "3",
                                        "--use-case", USE_CASE, "--json", "--open"], [("POST", "/reservations")]),
             "reservations": (["reservations"], [("GET", "/reservations")]),
             "reservations --json": (["reservations", "--json"], [("GET", "/reservations")]),
@@ -991,8 +1033,11 @@ class Telemetry(unittest.TestCase):
                          ["cloud", "reservations", "cancel", "<redacted>", "--yes"])
         self.assertEqual(run._telemetry_argv(["--session", "s1", "cloud", "reservations", "rsv_0000"]),
                          ["cloud", "reservations", "<redacted>"])
-        self.assertEqual(run._telemetry_argv(["cloud", "reserve", "--type=android", "--qty=2", "-secret", "x=y"]),
-                         ["cloud", "reserve", "--type=android", "--qty=2", "<redacted>", "<redacted>"])
+        self.assertEqual(run._telemetry_argv(["cloud", "reserve", "--type=iphone_esim", "--qty=2", "-secret", "x=y"]),
+                         ["cloud", "reserve", "--type=iphone_esim", "--qty=2", "<redacted>", "<redacted>"])
+        # A type these commands do not take is not one of their fixed words.
+        self.assertEqual(run._telemetry_argv(["cloud", "reserve", "--type", "android", "--type=android"]),
+                         ["cloud", "reserve", "--type", "<redacted>", "--type=<redacted>"])
         # Other commands are recorded as they were.
         self.assertEqual(run._telemetry_argv(["cloud", "start", "Saved phone"]), ["cloud", "start", "Saved phone"])
 
