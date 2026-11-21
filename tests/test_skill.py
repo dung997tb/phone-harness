@@ -143,7 +143,7 @@ class SkillOutput(unittest.TestCase):
                 "`rotate()` returns `{device, orientation, turned}`",
                 "A turn is refused on a locked phone (`wake()` first)",
                 "raises `Portrait Orientation Lock is on`",
-                "until that lock is turned off in Control Center",
+                "the phone stays upright while that lock is on. No helper turns the lock off, so tell the user",
                 "Check `supports('device.rotate')` first",
                 "| `device.rotate` | `to` | `{device, orientation, turned}`."):
             self.assertIn(rule, section)

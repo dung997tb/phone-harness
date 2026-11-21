@@ -343,7 +343,7 @@ the phone is held now and `orientation` how the screen is drawn, `'portrait'`
 when the app in front did not turn. A turn is refused on a locked phone
 (`wake()` first), and while iOS's Portrait Orientation Lock is on: `rotate()`
 then raises `Portrait Orientation Lock is on`, and the phone stays upright
-until that lock is turned off in Control Center. Check
+while that lock is on. No helper turns the lock off, so tell the user. Check
 `supports('device.rotate')` first; a host that cannot turn a phone lists no
 such op.
 
