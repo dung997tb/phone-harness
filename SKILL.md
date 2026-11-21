@@ -332,12 +332,14 @@ There, `home()` is the one thing to try.
 **Which way up.** A cloud iPhone lies flat in a rack, so it does not turn by
 itself. `rotate("landscape_left")`, `rotate("landscape_right")` and
 `rotate("portrait")` turn it, as if it had been turned in the hand; the two
-landscapes are the two ways round. `screenshot()`, `screen()` and
-`find_window()` follow the screen: after a turn their size and every
-coordinate are new, so read the screen again before the next tap. An app
-that supports only one way up stays that way, and `find_window()` then
-reports the same size as before. Check `supports('device.rotate')` first; a
-host that cannot turn a phone lists no such op.
+landscapes are the two ways round. `screenshot()` and `screen()` show the
+screen as it is now: after a turn their size and every coordinate are new,
+so read the screen again before the next tap. `screen_info()["window"]` is
+the size to go by, because it comes from a fresh capture; `find_window()`
+can still report the size the session started with. An app that supports
+only one way up stays that way, and the capture is then the same size as
+before. Check `supports('device.rotate')` first; a host that cannot turn a
+phone lists no such op.
 
 The client posts `{"op", "kw"}` to `<control url>/op` and reads the host's
 list from `GET <control url>/ops` (`remote.py`). `supports(op)` is that list.

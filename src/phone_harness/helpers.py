@@ -576,8 +576,8 @@ def rotate(to):
     """Turn a cloud iPhone to 'portrait', 'landscape_left' or
     'landscape_right', as if it had been turned in the hand. The screen's
     size and every coordinate change with it, so read the screen again before
-    the next tap. An app that supports only one way up stays that way. Cloud
-    iPhones only."""
+    the next tap: screenshot() and screen() show it as it is now. An app that
+    supports only one way up stays that way. Cloud iPhones only."""
     if to not in ORIENTATIONS:
         raise ValueError("rotate(to): to is 'portrait', 'landscape_left' or 'landscape_right', "
                          f"not {to!r}")

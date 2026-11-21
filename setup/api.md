@@ -51,9 +51,10 @@ ask the user for.
 spaces; a link is often a credential, so do not print it.
 
 `device.rotate` turns the phone, which lies flat in a rack and does not turn
-by itself. `screen.capture`, `screen.text` and `screen.bounds` follow the
-screen, so after a turn read them again: the size and every coordinate are
-new. An app that supports only one way up stays that way.
+by itself. `screen.capture` and `screen.text` show the screen as it is now,
+so after a turn read them again: the size and every coordinate are new. Go by
+the size of the capture; `screen.bounds` can still answer the size the
+session started with. An app that supports only one way up stays that way.
 
 The same `{"op", "kw"}` body can be posted to `$API/sessions/SID/op` with the
 API key in place of the control token; the MCP server drives a phone that way.

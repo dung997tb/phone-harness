@@ -137,6 +137,8 @@ class SkillOutput(unittest.TestCase):
                 "**Which way up.**", "lies flat in a rack, so it does not turn by itself",
                 '`rotate("landscape_left")`, `rotate("landscape_right")` and `rotate("portrait")`',
                 "after a turn their size and every coordinate are new, so read the screen again before the next tap",
+                '`screen_info()["window"]` is the size to go by',
+                "`find_window()` can still report the size the session started with",
                 "An app that supports only one way up stays that way",
                 "Check `supports('device.rotate')` first",
                 "| `device.rotate` | `to` | host result."):
@@ -145,6 +147,7 @@ class SkillOutput(unittest.TestCase):
         api = " ".join((root / "setup" / "api.md").read_text().split())
         for rule in ('{"op":"device.rotate","kw":{"to":"landscape_left"}}', "portrait | landscape_left | landscape_right",
                      "after a turn read them again: the size and every coordinate are new",
+                     "`screen.bounds` can still answer the size the session started with",
                      "`device.wake`, `device.rotate` and `url.open`"):
             self.assertIn(rule, api)
 
