@@ -140,22 +140,32 @@ class SkillOutput(unittest.TestCase):
                 '`screen_info()["window"]` is the size to go by',
                 "`find_window()` can still report the size the session started with",
                 "An app that supports only one way up stays that way",
-                "`rotate()` returns `{device, orientation, turned}`",
-                "A turn is refused on a locked phone (`wake()` first)",
-                "raises `Portrait Orientation Lock is on`",
-                "the phone stays upright while that lock is on. No helper turns the lock off, so tell the user",
+                "`rotate()` returns `{device, orientation, turned, lock}`",
+                # the lock is not a refusal: the turn deals with it, and says whether it is put back
+                "If iOS's Portrait Orientation Lock is on, `rotate()` turns it off first",
+                "goes through Settings: it takes about a minute and leaves the phone on its Home Screen",
+                "open the app again afterwards",
+                "The lock then stays off until a turn back to portrait, which puts it on again",
+                "`lock` is `'off'` or `'on'` when the call changed the lock",
+                "A turn is refused on a phone at its lock screen (`wake()` first)",
                 "Check `supports('device.rotate')` first",
-                "| `device.rotate` | `to` | `{device, orientation, turned}`."):
+                "| `device.rotate` | `to` | `{device, orientation, turned, lock}`."):
             self.assertIn(rule, section)
+        for gone in ("raises `Portrait Orientation Lock is on`", "No helper turns the lock off", "stays upright"):
+            self.assertNotIn(gone, section)
         root = Path(__file__).resolve().parents[1]
         api = " ".join((root / "setup" / "api.md").read_text().split())
         for rule in ('{"op":"device.rotate","kw":{"to":"landscape_left"}}', "portrait | landscape_left | landscape_right",
                      "after a turn read them again: the size and every coordinate are new",
                      "`screen.bounds` can still answer the size the session started with",
-                     "It answers `{device, orientation, turned}`",
-                     "while iOS's Portrait Orientation Lock is on (`Portrait Orientation Lock is on`)",
+                     "It answers `{device, orientation, turned, lock}`",
+                     "If iOS's Portrait Orientation Lock is on, the turn switches it off first",
+                     "takes about a minute, so allow the request two or three",
+                     "The lock then stays off until a turn back to portrait, which puts it on again",
                      "`device.wake`, `device.rotate` and `url.open`"):
             self.assertIn(rule, api)
+        self.assertNotIn("orientation_locked", api)
+        self.assertNotIn("(`Portrait Orientation Lock is on`)", api)
 
     def test_screenshot_prints_the_path_it_returns(self):
         import contextlib

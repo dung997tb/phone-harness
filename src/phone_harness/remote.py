@@ -219,6 +219,13 @@ class Remote(Backend):
     def _url_open(self, url):
         return self._op("url.open", timeout=60, url=url)
 
+    def _device_rotate(self, to):
+        # A phone with Portrait Orientation Lock on does not turn, so the host
+        # turns the lock off first, and puts it back on the next turn to
+        # portrait. Each goes through Settings and takes about a minute, and
+        # one call can do both.
+        return self._op("device.rotate", timeout=200, to=to)
+
     def _session_refocus(self):
         return None
 

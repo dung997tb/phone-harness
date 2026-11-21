@@ -54,11 +54,16 @@ spaces; a link is often a credential, so do not print it.
 by itself. `screen.capture` and `screen.text` show the screen as it is now,
 so after a turn read them again: the size and every coordinate are new. Go by
 the size of the capture; `screen.bounds` can still answer the size the
-session started with. It answers `{device, orientation, turned}`: `device`
-is how the phone is held now and `orientation` how the screen is drawn, which
-stays `"portrait"` when the app in front supports only one way up. A turn is
-refused with 409 on a locked phone, and while iOS's Portrait Orientation Lock
-is on (`Portrait Orientation Lock is on`).
+session started with. It answers `{device, orientation, turned, lock}`:
+`device` is how the phone is held now and `orientation` how the screen is
+drawn, which stays `"portrait"` when what is in front supports only one way
+up. If iOS's Portrait Orientation Lock is on, the turn switches it off first,
+because a phone with it on does not turn. That goes through Settings and
+takes about a minute, so allow the request two or three, and expect the phone
+on its Home Screen afterwards. The lock then stays off until a turn back to
+portrait, which puts it on again. `lock` is `"off"` or `"on"` when the call
+changed the lock, else null. A turn is refused with 409 on a phone at its
+lock screen.
 
 The same `{"op", "kw"}` body can be posted to `$API/sessions/SID/op` with the
 API key in place of the control token; the MCP server drives a phone that way.

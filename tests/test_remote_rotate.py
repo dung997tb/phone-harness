@@ -2,8 +2,13 @@
 
 A cloud iPhone lies flat in a rack and cannot be stood up, so which way up its
 screen is has to be asked for. The control host here is a stand-in; no cloud.
-It answers a turn as phone-host does, {device, orientation, turned}, and
-refuses one as the control URL passes it on: the host's sentence, no code.
+It answers a turn as phone-host does: {device, orientation, turned, lock}.
+
+A phone with iOS's Portrait Orientation Lock on does not turn, so the host
+turns the lock off before the turn (it used to refuse). That goes through
+Settings and ends on the Home Screen, which on a small iPhone stays upright.
+After a turn to a landscape the lock stays off; the next turn to portrait puts
+it back on, when a turn was what switched it off.
 """
 import json
 import sys
@@ -21,7 +26,6 @@ from phone_harness.remote import Remote  # noqa: E402
 from phone_harness.transport import Unsupported  # noqa: E402
 
 TALL, WIDE = {"x": 0, "y": 0, "w": 750, "h": 1334, "id": "udid1"}, {"x": 0, "y": 0, "w": 1334, "h": 750, "id": "udid1"}
-HOST_UPRIGHT = "OrientationLocked: Portrait Orientation Lock is on: the phone did not turn"
 
 
 class Control(BaseHTTPRequestHandler):
@@ -30,6 +34,8 @@ class Control(BaseHTTPRequestHandler):
     orientation = "portrait"
     app_turns = True        # False: the app in front supports one way up and stays upright
     upright_lock = False    # iOS's Portrait Orientation Lock
+    unlocked_by_a_turn = False   # the host's note that a turn switched the lock off
+    at_home = False         # on the Home Screen, where changing the lock leaves the phone
     calls = []
 
     def log_message(self, *a):
@@ -58,12 +64,20 @@ class Control(BaseHTTPRequestHandler):
             if op == "device.rotate":
                 if set(kw) != {"to"} or kw["to"] not in ("portrait", "landscape_left", "landscape_right"):
                     return self._send(400, {"error": "to must be portrait, landscape_left or landscape_right"})
+                lock = None
                 if Control.upright_lock and kw["to"] != Control.orientation:
-                    return self._send(409, {"error": HOST_UPRIGHT})
+                    # The lock is in the way: off first, and the host notes that it did.
+                    Control.upright_lock, Control.unlocked_by_a_turn, lock = False, True, "off"
+                if kw["to"] == "portrait" and Control.unlocked_by_a_turn:
+                    # Back on at the next turn to portrait, only when that note is there.
+                    Control.upright_lock, Control.unlocked_by_a_turn, lock = True, False, "on"
+                if lock:
+                    Control.at_home = True
                 turned = 0 if kw["to"] == Control.orientation else 1
                 Control.orientation = kw["to"]
-                return self._send(200, {"result": {"device": kw["to"], "turned": turned,
-                                                   "orientation": kw["to"] if Control.app_turns else "portrait"}})
+                drawn = kw["to"] if Control.app_turns and not Control.at_home else "portrait"
+                return self._send(200, {"result": {"device": kw["to"], "turned": turned, "orientation": drawn,
+                                                   "lock": lock}})
             if op == "session.state":
                 return self._send(200, {"result": "ready"})
             if op == "screen.capture":
@@ -81,6 +95,7 @@ class TurningACloudIphone(unittest.TestCase):
     def setUp(self):
         Control.ops = ("screen.bounds", "screen.capture", "session.state", "input.tap", "device.rotate", "device.wake")
         Control.orientation, Control.app_turns, Control.upright_lock, Control.calls = "portrait", True, False, []
+        Control.at_home = Control.unlocked_by_a_turn = False
         server = ThreadingHTTPServer(("127.0.0.1", 0), Control)
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -94,7 +109,8 @@ class TurningACloudIphone(unittest.TestCase):
 
     def test_each_way_up_is_one_op_and_the_two_landscapes_are_different_words(self):
         for to in ("landscape_left", "landscape_right", "portrait"):
-            self.assertEqual(self.remote.send("device.rotate", to=to), {"device": to, "orientation": to, "turned": 1})
+            self.assertEqual(self.remote.send("device.rotate", to=to),
+                             {"device": to, "orientation": to, "turned": 1, "lock": None})
         self.assertEqual(Control.calls, [{"op": "device.rotate", "kw": {"to": "landscape_left"}},
                                          {"op": "device.rotate", "kw": {"to": "landscape_right"}},
                                          {"op": "device.rotate", "kw": {"to": "portrait"}}])
@@ -108,15 +124,45 @@ class TurningACloudIphone(unittest.TestCase):
     def test_an_app_that_does_not_turn_leaves_the_screen_drawn_upright(self):
         Control.app_turns = False
         self.assertEqual(self.remote.send("device.rotate", to="landscape_left"),
-                         {"device": "landscape_left", "orientation": "portrait", "turned": 1})
+                         {"device": "landscape_left", "orientation": "portrait", "turned": 1, "lock": None})
 
-    def test_portrait_orientation_lock_is_said_in_the_hosts_own_words(self):
-        """The refusal is a 409 like the locked one, so the phone is asked its state, and it is not locked."""
+    def test_a_turn_to_a_landscape_turns_the_lock_off_and_leaves_it_off(self):
+        """One call, no refusal: the answer says the lock was turned off, and the
+        phone is on its Home Screen, which stays upright."""
         Control.upright_lock = True
-        with self.assertRaises(RuntimeError) as raised:
-            self.remote.send("device.rotate", to="landscape_left")
-        self.assertEqual(str(raised.exception), HOST_UPRIGHT)
-        self.assertEqual([c["op"] for c in Control.calls], ["device.rotate", "session.state"])
+        self.assertEqual(self.remote.send("device.rotate", to="landscape_left"),
+                         {"device": "landscape_left", "orientation": "portrait", "turned": 1, "lock": "off"})
+        self.assertFalse(Control.upright_lock)
+        self.assertEqual([c["op"] for c in Control.calls], ["device.rotate"])
+        # the lock is off now, so the next turn has nothing to say about it
+        self.assertIsNone(self.remote.send("device.rotate", to="landscape_right")["lock"])
+
+    def test_the_next_turn_to_portrait_puts_the_lock_back(self):
+        Control.upright_lock = True
+        self.assertEqual(self.remote.send("device.rotate", to="landscape_left")["lock"], "off")
+        self.assertIsNone(self.remote.send("device.rotate", to="landscape_right")["lock"])
+        self.assertEqual(self.remote.send("device.rotate", to="portrait")["lock"], "on")
+        self.assertTrue(Control.upright_lock)
+        self.assertIsNone(self.remote.send("device.rotate", to="portrait")["lock"])      # and only once
+
+    def test_a_lock_somebody_else_turned_off_is_not_put_back(self):
+        self.remote.send("device.rotate", to="landscape_left")
+        self.assertIsNone(self.remote.send("device.rotate", to="portrait")["lock"])
+        self.assertFalse(Control.upright_lock)
+
+    def test_a_turn_is_waited_for_longer_than_any_other_op(self):
+        """Changing the lock goes through Settings, and one call can do it twice: about a minute each."""
+        waits = {}
+        call = self.remote._call
+
+        def record(method, path, body=None, timeout=60):
+            if isinstance(body, dict) and "op" in body:
+                waits[body["op"]] = timeout
+            return call(method, path, body, timeout)
+        self.remote._call = record
+        self.remote.send("device.rotate", to="landscape_left")
+        self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual(waits, {"device.rotate": 200, "input.tap": 60})
 
     def test_a_host_that_cannot_turn_a_phone_is_unsupported_and_is_sent_nothing(self):
         Control.ops = ("screen.bounds", "input.tap", "device.wake", "session.state")
