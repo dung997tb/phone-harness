@@ -119,7 +119,8 @@ class SkillOutput(unittest.TestCase):
         api = " ".join((root / "setup" / "api.md").read_text().split())
         install = " ".join((root / "install.md").read_text().split())
         for rule in ('{"op":"device.wake","kw":{}}', '{"op":"url.open","kw":{"url":"https://example.com"}}',
-                     'answer 409 with `"code": "locked"`', "Send `device.wake` and repeat the op",
+                     "answer 409 (`The iPhone is locked. ...`)",
+                     '`session.state` answers `"locked"` or `"standby"`', "Send `device.wake` and repeat the op",
                      "It answers `{state, was, woke, through}`",
                      "set up with no passcode", "an https link only, of at most 4096 characters",
                      "`$API/sessions/SID/op` with the API key", "answers a locked phone with 502 and no code"):
