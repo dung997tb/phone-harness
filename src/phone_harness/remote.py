@@ -35,10 +35,11 @@ WAKEABLE = ("locked", "standby")        # the states `session.state` gives such 
 LOCKED = ("the cloud iPhone is locked or asleep. Call wake() and run this step again. It has no passcode, "
           "so there is nothing to type and nothing to ask the user for")
 # A turn that did not come back may not have failed. One that has to change the
-# rotation lock takes longer than the gateway in front of the control URL waits,
-# and the host carries on. Asking again at once would start a second turn under
-# the first, so the caller is told to look first.
-STILL_TURNING = ("A turn that has to change the rotation lock first takes a minute or two and may still be going: "
+# rotation lock takes about 46 s on the phone it was measured on, and the
+# gateway in front of the control URL waits 70 s; past that it answers 502 and
+# the host carries on. Asking again at once would start a second turn under the
+# first, so the caller is told to look first.
+STILL_TURNING = ("A turn that has to change the rotation lock first takes about a minute and may still be going: "
                  "wait a minute, then look at screenshot() before calling rotate() again")
 
 
@@ -228,8 +229,8 @@ class Remote(Backend):
     def _device_rotate(self, to):
         # A phone with Portrait Orientation Lock on does not turn, so the host
         # turns the lock off first, and puts it back on the next turn to
-        # portrait. Each goes through Settings and takes about a minute, and
-        # one call can do both.
+        # portrait. Each goes through Settings and takes about a minute; the
+        # host says to allow two.
         try:
             return self._op("device.rotate", timeout=200, to=to)
         except Unsupported:

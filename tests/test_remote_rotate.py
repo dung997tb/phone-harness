@@ -161,7 +161,7 @@ class TurningACloudIphone(unittest.TestCase):
         self.assertFalse(Control.upright_lock)
 
     def test_a_turn_is_waited_for_longer_than_any_other_op(self):
-        """Changing the lock goes through Settings, and one call can do it twice: about a minute each."""
+        """Changing the lock goes through Settings: about 46 s on the test phone, where a plain turn takes one or two."""
         waits = {}
         call = self.remote._call
 
