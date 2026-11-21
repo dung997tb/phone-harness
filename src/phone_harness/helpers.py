@@ -574,10 +574,13 @@ ORIENTATIONS = ("portrait", "landscape_left", "landscape_right")
 
 def rotate(to):
     """Turn a cloud iPhone to 'portrait', 'landscape_left' or
-    'landscape_right', as if it had been turned in the hand. The screen's
-    size and every coordinate change with it, so read the screen again before
-    the next tap: screenshot() and screen() show it as it is now. An app that
-    supports only one way up stays that way. Cloud iPhones only."""
+    'landscape_right', as if it had been turned in the hand. Returns {device,
+    orientation, turned}: `device` is how the phone is held now, `orientation`
+    how the screen is drawn, which stays 'portrait' when the app in front
+    supports only one way up. The screen's size and every coordinate change
+    with a turn, so read the screen again before the next tap: screenshot()
+    and screen() show it as it is now. The phone has to be awake, and iOS's
+    Portrait Orientation Lock off. Cloud iPhones only."""
     if to not in ORIENTATIONS:
         raise ValueError("rotate(to): to is 'portrait', 'landscape_left' or 'landscape_right', "
                          f"not {to!r}")

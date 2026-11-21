@@ -140,14 +140,20 @@ class SkillOutput(unittest.TestCase):
                 '`screen_info()["window"]` is the size to go by',
                 "`find_window()` can still report the size the session started with",
                 "An app that supports only one way up stays that way",
+                "`rotate()` returns `{device, orientation, turned}`",
+                "A turn is refused on a locked phone (`wake()` first)",
+                "raises `Portrait Orientation Lock is on`",
+                "until that lock is turned off in Control Center",
                 "Check `supports('device.rotate')` first",
-                "| `device.rotate` | `to` | host result."):
+                "| `device.rotate` | `to` | `{device, orientation, turned}`."):
             self.assertIn(rule, section)
         root = Path(__file__).resolve().parents[1]
         api = " ".join((root / "setup" / "api.md").read_text().split())
         for rule in ('{"op":"device.rotate","kw":{"to":"landscape_left"}}', "portrait | landscape_left | landscape_right",
                      "after a turn read them again: the size and every coordinate are new",
                      "`screen.bounds` can still answer the size the session started with",
+                     "It answers `{device, orientation, turned}`",
+                     "while iOS's Portrait Orientation Lock is on (`Portrait Orientation Lock is on`)",
                      "`device.wake`, `device.rotate` and `url.open`"):
             self.assertIn(rule, api)
 

@@ -61,14 +61,18 @@ nothing in common — so the shared layer is this vocabulary instead.
         the harness has no such control, and a phone on the desk is one: its
         owner unlocks it.
 
-    device.rotate       to              -> host result
+    device.rotate       to              -> {device, orientation, turned}
 
         Turns the phone to 'portrait', 'landscape_left' or 'landscape_right',
         as if it had been turned in the hand. A cloud iPhone lies flat in a
-        rack, so this is the only way its screen turns. The screen's size
-        and every coordinate change with it. The two landscapes are separate
-        words on purpose: which way up the screen is decides which way a
-        swipe goes. Unsupported where the harness has no such control.
+        rack, so this is the only way its screen turns. `device` is how the
+        phone is held afterwards and `orientation` how the screen is drawn,
+        which stays 'portrait' when the app in front does not turn. The
+        screen's size and every coordinate change with it. The two
+        landscapes are separate words on purpose: which way up the screen is
+        decides which way a swipe goes. Refused on a locked phone, and while
+        iOS's Portrait Orientation Lock is on. Unsupported where the harness
+        has no such control.
 
     session.state                       -> backend-defined string, 'ready' when usable
     session.require                     -> bounds, or raise telling the USER what to do

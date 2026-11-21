@@ -54,7 +54,11 @@ spaces; a link is often a credential, so do not print it.
 by itself. `screen.capture` and `screen.text` show the screen as it is now,
 so after a turn read them again: the size and every coordinate are new. Go by
 the size of the capture; `screen.bounds` can still answer the size the
-session started with. An app that supports only one way up stays that way.
+session started with. It answers `{device, orientation, turned}`: `device`
+is how the phone is held now and `orientation` how the screen is drawn, which
+stays `"portrait"` when the app in front supports only one way up. A turn is
+refused with 409 on a locked phone, and while iOS's Portrait Orientation Lock
+is on (`Portrait Orientation Lock is on`).
 
 The same `{"op", "kw"}` body can be posted to `$API/sessions/SID/op` with the
 API key in place of the control token; the MCP server drives a phone that way.

@@ -2,6 +2,8 @@
 
 A cloud iPhone lies flat in a rack and cannot be stood up, so which way up its
 screen is has to be asked for. The control host here is a stand-in; no cloud.
+It answers a turn as phone-host does, {device, orientation, turned}, and
+refuses one as the control URL passes it on: the host's sentence, no code.
 """
 import json
 import sys
@@ -19,12 +21,15 @@ from phone_harness.remote import Remote  # noqa: E402
 from phone_harness.transport import Unsupported  # noqa: E402
 
 TALL, WIDE = {"x": 0, "y": 0, "w": 750, "h": 1334, "id": "udid1"}, {"x": 0, "y": 0, "w": 1334, "h": 750, "id": "udid1"}
+HOST_UPRIGHT = "OrientationLocked: Portrait Orientation Lock is on: the phone did not turn"
 
 
 class Control(BaseHTTPRequestHandler):
     """A phone's control URL: /ops and /op, as phone-host serves them."""
     ops = ()
     orientation = "portrait"
+    app_turns = True        # False: the app in front supports one way up and stays upright
+    upright_lock = False    # iOS's Portrait Orientation Lock
     calls = []
 
     def log_message(self, *a):
@@ -53,10 +58,19 @@ class Control(BaseHTTPRequestHandler):
             if op == "device.rotate":
                 if set(kw) != {"to"} or kw["to"] not in ("portrait", "landscape_left", "landscape_right"):
                     return self._send(400, {"error": "to must be portrait, landscape_left or landscape_right"})
+                if Control.upright_lock and kw["to"] != Control.orientation:
+                    return self._send(409, {"error": HOST_UPRIGHT})
+                turned = 0 if kw["to"] == Control.orientation else 1
                 Control.orientation = kw["to"]
-                return self._send(200, {"result": {"orientation": kw["to"]}})
+                return self._send(200, {"result": {"device": kw["to"], "turned": turned,
+                                                   "orientation": kw["to"] if Control.app_turns else "portrait"}})
+            if op == "session.state":
+                return self._send(200, {"result": "ready"})
+            if op == "screen.capture":
+                wide = Control.orientation != "portrait" and Control.app_turns
+                return self._send(200, {"result": {"png_b64": "", "bounds": WIDE if wide else TALL}})
             if op == "screen.bounds":
-                return self._send(200, {"result": TALL if Control.orientation == "portrait" else WIDE})
+                return self._send(200, {"result": TALL})        # the size the session started with
             return self._send(200, {"result": True})
         return self._send(404, {"error": "not found"})
 
@@ -65,7 +79,8 @@ class Control(BaseHTTPRequestHandler):
 
 class TurningACloudIphone(unittest.TestCase):
     def setUp(self):
-        Control.ops, Control.orientation, Control.calls = ("screen.bounds", "input.tap", "device.rotate"), "portrait", []
+        Control.ops = ("screen.bounds", "screen.capture", "session.state", "input.tap", "device.rotate", "device.wake")
+        Control.orientation, Control.app_turns, Control.upright_lock, Control.calls = "portrait", True, False, []
         server = ThreadingHTTPServer(("127.0.0.1", 0), Control)
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -79,18 +94,32 @@ class TurningACloudIphone(unittest.TestCase):
 
     def test_each_way_up_is_one_op_and_the_two_landscapes_are_different_words(self):
         for to in ("landscape_left", "landscape_right", "portrait"):
-            self.assertEqual(self.remote.send("device.rotate", to=to), {"orientation": to})
+            self.assertEqual(self.remote.send("device.rotate", to=to), {"device": to, "orientation": to, "turned": 1})
         self.assertEqual(Control.calls, [{"op": "device.rotate", "kw": {"to": "landscape_left"}},
                                          {"op": "device.rotate", "kw": {"to": "landscape_right"}},
                                          {"op": "device.rotate", "kw": {"to": "portrait"}}])
 
-    def test_the_screen_size_follows_the_turn(self):
-        self.assertEqual(self.remote.send("screen.bounds")["w"], 750)
+    def test_a_capture_follows_the_turn_and_the_reported_size_may_not(self):
+        """phone-host records the screen's size once, when the session becomes ready."""
         self.remote.send("device.rotate", to="landscape_left")
-        self.assertEqual((self.remote.send("screen.bounds")["w"], self.remote.send("screen.bounds")["h"]), (1334, 750))
+        self.assertEqual(self.remote._op("screen.capture")["bounds"]["w"], 1334)
+        self.assertEqual(self.remote.send("screen.bounds")["w"], 750)
+
+    def test_an_app_that_does_not_turn_leaves_the_screen_drawn_upright(self):
+        Control.app_turns = False
+        self.assertEqual(self.remote.send("device.rotate", to="landscape_left"),
+                         {"device": "landscape_left", "orientation": "portrait", "turned": 1})
+
+    def test_portrait_orientation_lock_is_said_in_the_hosts_own_words(self):
+        """The refusal is a 409 like the locked one, so the phone is asked its state, and it is not locked."""
+        Control.upright_lock = True
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("device.rotate", to="landscape_left")
+        self.assertEqual(str(raised.exception), HOST_UPRIGHT)
+        self.assertEqual([c["op"] for c in Control.calls], ["device.rotate", "session.state"])
 
     def test_a_host_that_cannot_turn_a_phone_is_unsupported_and_is_sent_nothing(self):
-        Control.ops = ("screen.bounds", "input.tap")
+        Control.ops = ("screen.bounds", "input.tap", "device.wake", "session.state")
         self.assertFalse(self.remote.supports("device.rotate"))
         with self.assertRaises(Unsupported) as raised:
             self.remote.send("device.rotate", to="portrait")
@@ -108,7 +137,7 @@ class TheRotateHelper(unittest.TestCase):
 
         def send(self, op, **kw):
             self.sent.append((op, kw))
-            return {"orientation": kw.get("to")}
+            return {"device": kw.get("to"), "orientation": kw.get("to"), "turned": 1}
 
     def with_phone(self, ops):
         from phone_harness import helpers
@@ -121,7 +150,7 @@ class TheRotateHelper(unittest.TestCase):
     def test_rotate_sends_the_op_with_the_way_up(self):
         helpers, phone = self.with_phone({"device.rotate"})
         for to in ("portrait", "landscape_left", "landscape_right"):
-            self.assertEqual(helpers.rotate(to), {"orientation": to})
+            self.assertEqual(helpers.rotate(to), {"device": to, "orientation": to, "turned": 1})
         self.assertEqual(phone.sent, [("device.rotate", {"to": "portrait"}), ("device.rotate", {"to": "landscape_left"}),
                                       ("device.rotate", {"to": "landscape_right"})])
 
