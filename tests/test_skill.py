@@ -127,6 +127,26 @@ class SkillOutput(unittest.TestCase):
         self.assertIn("`wake()` wakes it and the step can run again", install)
         self.assertIn("set up with no passcode", install)
 
+    def test_skill_says_how_to_turn_a_cloud_iphone_and_that_coordinates_go_stale(self):
+        text = _skill_text()
+        self.assertIn('- `rotate(to)` - Turn a cloud iPhone to `"portrait"`, `"landscape_left"` or '
+                      '`"landscape_right"`. Cloud iPhones only.', text)
+        section = " ".join(text.split("\n## Cloud iPhone\n", 1)[1].split("\n## ", 1)[0].split())
+        for rule in (
+                "**Which way up.**", "lies flat in a rack, so it does not turn by itself",
+                '`rotate("landscape_left")`, `rotate("landscape_right")` and `rotate("portrait")`',
+                "after a turn their size and every coordinate are new, so read the screen again before the next tap",
+                "An app that supports only one way up stays that way",
+                "Check `supports('device.rotate')` first",
+                "| `device.rotate` | `to` | host result."):
+            self.assertIn(rule, section)
+        root = Path(__file__).resolve().parents[1]
+        api = " ".join((root / "setup" / "api.md").read_text().split())
+        for rule in ('{"op":"device.rotate","kw":{"to":"landscape_left"}}', "portrait | landscape_left | landscape_right",
+                     "after a turn read them again: the size and every coordinate are new",
+                     "`device.wake`, `device.rotate` and `url.open`"):
+            self.assertIn(rule, api)
+
     def test_screenshot_prints_the_path_it_returns(self):
         import contextlib
 

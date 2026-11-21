@@ -61,6 +61,15 @@ nothing in common — so the shared layer is this vocabulary instead.
         the harness has no such control, and a phone on the desk is one: its
         owner unlocks it.
 
+    device.rotate       to              -> host result
+
+        Turns the phone to 'portrait', 'landscape_left' or 'landscape_right',
+        as if it had been turned in the hand. A cloud iPhone lies flat in a
+        rack, so this is the only way its screen turns. The screen's size
+        and every coordinate change with it. The two landscapes are separate
+        words on purpose: which way up the screen is decides which way a
+        swipe goes. Unsupported where the harness has no such control.
+
     session.state                       -> backend-defined string, 'ready' when usable
     session.require                     -> bounds, or raise telling the USER what to do
     session.refocus                     -> None    (a no-op where nothing needs focus)
@@ -106,7 +115,7 @@ OP_NAMES = (
     "input.keys", "input.text",
     "nav.home", "nav.back", "nav.recents",
     "apps.launch", "apps.current", "apps.list",
-    "device.wake",
+    "device.wake", "device.rotate",
     "session.state", "session.require", "session.refocus", "session.detail",
     "focus.probe", "focus.diff",
     "url.open",

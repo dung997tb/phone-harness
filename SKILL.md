@@ -48,6 +48,7 @@ no hardware and is always the fallback.
 - `open_app(name)` - Launch an app and return the app id that launched.
 - `open_url(url)` - Open an https link in the phone's browser, whole. Cloud phones only for now.
 - `wake()` - Wake a cloud iPhone that is asleep or on its lock screen. No passcode is typed. Cloud iPhones only.
+- `rotate(to)` - Turn a cloud iPhone to `"portrait"`, `"landscape_left"` or `"landscape_right"`. Cloud iPhones only.
 - `push_file(path)` - Send a file to the phone; it opens in the phone's browser under its own name. Cloud phones only for now.
 - `swipe(direction, distance=0.4, at=None)` - Flick. `direction` is finger motion: `"up"`, `"down"`, `"left"`, or `"right"`.
 - `scroll(direction="down", amount=0.3, at=None)` - Scroll. `direction` is the content to reveal: `"down"`, `"up"`, `"left"`, or `"right"`.
@@ -328,6 +329,16 @@ the user. Check `supports('device.wake')` first; an older host lists no such
 op, and its refusal is `The iPhone is locked. Unlock it on the phone ...`.
 There, `home()` is the one thing to try.
 
+**Which way up.** A cloud iPhone lies flat in a rack, so it does not turn by
+itself. `rotate("landscape_left")`, `rotate("landscape_right")` and
+`rotate("portrait")` turn it, as if it had been turned in the hand; the two
+landscapes are the two ways round. `screenshot()`, `screen()` and
+`find_window()` follow the screen: after a turn their size and every
+coordinate are new, so read the screen again before the next tap. An app
+that supports only one way up stays that way, and `find_window()` then
+reports the same size as before. Check `supports('device.rotate')` first; a
+host that cannot turn a phone lists no such op.
+
 The client posts `{"op", "kw"}` to `<control url>/op` and reads the host's
 list from `GET <control url>/ops` (`remote.py`). `supports(op)` is that list.
 `send` of an op the host did not list raises `Unsupported` before the POST
@@ -353,6 +364,7 @@ documents or decodes.
 | `apps.current` | | app id or None |
 | `apps.list` | `include_system` | `[app id]`. Timeout 90s. |
 | `device.wake` | | `{state, was, woke, through}`; `state` is `'ready'` when the phone takes input. Turns the screen on and gets past the lock screen and StandBy. Never types a passcode. |
+| `device.rotate` | `to` | host result. `to` is `'portrait'`, `'landscape_left'` or `'landscape_right'`. The screen's size and every coordinate change with it. |
 | `session.state` | | backend-defined string; `'ready'` when usable. A host that can wake the phone also says `'locked'`, `'standby'`, `'asleep'` or `'not-running'`. |
 | `session.require` | | bounds, or raise telling the user what to do |
 | `session.refocus` | | `None` here. The client does not call the host. |
