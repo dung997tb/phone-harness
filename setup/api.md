@@ -33,15 +33,17 @@ curl -s -H "$C" -H 'Content-Type: application/json' \
 curl -s -H "$C" -H 'Content-Type: application/json' \
   -d '{"op":"nav.home","kw":{}}' $CONTROL_URL/op      # Home Screen
 curl -s -H "$C" -H 'Content-Type: application/json' \
-  -d '{"op":"device.wake","kw":{}}' $CONTROL_URL/op   # wake it; "ready" when it is awake
+  -d '{"op":"device.wake","kw":{}}' $CONTROL_URL/op   # wake it; "state" is "ready" when it takes input
 curl -s -H "$C" -H 'Content-Type: application/json' \
   -d '{"op":"url.open","kw":{"url":"https://example.com"}}' $CONTROL_URL/op  # open an https link in Safari
 ```
 
-A cloud iPhone that has been left alone goes to sleep and may show its lock
-screen. Taps, typing, `apps.launch` and `url.open` then answer 409 with
-`"code": "locked"`. Send `device.wake` and repeat the op. These phones are set
-up with no passcode: there is none to send, and none to ask the user for.
+A cloud iPhone that has been left alone goes to sleep: its screen is off, or
+shows the lock screen or the StandBy clock. On the lock screen and in StandBy,
+taps, typing, `apps.launch` and `url.open` answer 409 with `"code": "locked"`.
+Send `device.wake` and repeat the op. It answers `{state, was, woke, through}`.
+These phones are set up with no passcode: there is none to send, and none to
+ask the user for.
 `url.open` takes an https link only, of at most 4096 characters, with no
 spaces; a link is often a credential, so do not print it.
 

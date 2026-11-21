@@ -58,9 +58,13 @@ class Control(BaseHTTPRequestHandler):
             if op not in Control.ops:
                 return self._send(400, {"error": f"this phone cannot {op!r}", "unsupported": True})
             if op == "device.wake":
+                # phone-host's answer: where it left the phone, where it found it, and whether it pressed anything.
+                was = "locked" if Control.locked else "ready"
                 if not Control.passcode:
                     Control.locked = False
-                return self._send(200, {"result": "locked" if Control.locked else "ready"})
+                woke = was != "ready"
+                return self._send(200, {"result": {"state": "locked" if Control.locked else "ready", "was": was,
+                                                   "woke": woke, "through": "home" if woke else None}})
             if Control.locked and op in GATED:
                 return self._send(409, {"error": HOST_LOCKED, "code": "locked"})
             if op == "input.busy":
@@ -89,11 +93,16 @@ class WakingACloudIphone(unittest.TestCase):
         self.assertTrue(self.remote.supports("device.wake"))
         self.assertIn("device.wake", self.remote.ops())
 
-    def test_wake_is_one_op_with_no_arguments_and_returns_the_state(self):
+    def test_wake_is_one_op_with_no_arguments_and_returns_what_the_host_says(self):
         Control.locked = True
-        self.assertEqual(self.remote.send("device.wake"), "ready")
+        self.assertEqual(self.remote.send("device.wake"),
+                         {"state": "ready", "was": "locked", "woke": True, "through": "home"})
         self.assertEqual(Control.calls, [{"op": "device.wake", "kw": {}}])
         self.assertFalse(Control.locked)
+
+    def test_waking_a_phone_that_is_awake_says_nothing_was_pressed(self):
+        self.assertEqual(self.remote.send("device.wake"),
+                         {"state": "ready", "was": "ready", "woke": False, "through": None})
 
     def test_a_locked_phone_says_to_call_wake_not_to_unlock_it_on_the_phone(self):
         Control.locked = True
@@ -112,12 +121,12 @@ class WakingACloudIphone(unittest.TestCase):
         Control.locked = True
         with self.assertRaises(RuntimeError):
             self.remote.send("input.tap", x=1, y=2)
-        self.assertEqual(self.remote.send("device.wake"), "ready")
+        self.assertEqual(self.remote.send("device.wake")["state"], "ready")
         self.assertIs(self.remote.send("input.tap", x=1, y=2), True)
 
     def test_a_passcode_someone_set_leaves_it_locked_and_nothing_is_typed(self):
         Control.locked = Control.passcode = True
-        self.assertEqual(self.remote.send("device.wake"), "locked")
+        self.assertEqual(self.remote.send("device.wake")["state"], "locked")
         self.assertEqual([c["op"] for c in Control.calls], ["device.wake"])
 
     def test_a_host_that_cannot_wake_keeps_its_own_sentence(self):
@@ -154,7 +163,7 @@ class TheWakeHelper(unittest.TestCase):
 
         def send(self, op, **kw):
             self.sent.append((op, kw))
-            return "ready"
+            return {"state": "ready", "was": "standby", "woke": True, "through": "app"}
 
     def with_phone(self, ops):
         from phone_harness import helpers
@@ -164,9 +173,9 @@ class TheWakeHelper(unittest.TestCase):
         self.addCleanup(setattr, helpers, "phone", saved)
         return helpers, phone
 
-    def test_wake_sends_the_op_and_returns_the_state(self):
+    def test_wake_sends_the_op_and_returns_what_the_host_says(self):
         helpers, phone = self.with_phone({"device.wake"})
-        self.assertEqual(helpers.wake(), "ready")
+        self.assertEqual(helpers.wake(), {"state": "ready", "was": "standby", "woke": True, "through": "app"})
         self.assertEqual(phone.sent, [("device.wake", {})])
 
     def test_a_phone_with_no_such_control_says_cloud_iphones_only_and_sends_nothing(self):

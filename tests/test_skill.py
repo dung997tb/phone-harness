@@ -98,13 +98,15 @@ class SkillOutput(unittest.TestCase):
                       "No passcode is typed. Cloud iPhones only.", text)
         section = " ".join(text.split("\n## Cloud iPhone\n", 1)[1].split("\n## ", 1)[0].split())
         for rule in (
-                "**Asleep or locked.**", "the StandBy clock",
+                "**Asleep or locked.**", "the StandBy clock", "a black `screenshot()` with no text",
                 "`screenshot()` and `screen()` still work",          # looking is how it learns the phone is locked
                 "Call `wake()` and run the step again",
+                "It returns `{state, was, woke, through}`",
+                "Getting past StandBy leaves the phone on its Home Screen",
                 "set up with no passcode: never ask the user for one, and nothing here types one",
                 "a passcode has been set on it; tell the user",
                 "Check `supports('device.wake')` first",
-                "| `device.wake` | | state string, `'ready'` when the phone is awake."):
+                "| `device.wake` | | `{state, was, woke, through}`; `state` is `'ready'` when the phone takes input."):
             self.assertIn(rule, section)
         # The sentence the skill quotes is the one the client raises.
         from phone_harness.remote import LOCKED
@@ -118,6 +120,7 @@ class SkillOutput(unittest.TestCase):
         install = " ".join((root / "install.md").read_text().split())
         for rule in ('{"op":"device.wake","kw":{}}', '{"op":"url.open","kw":{"url":"https://example.com"}}',
                      'answer 409 with `"code": "locked"`', "Send `device.wake` and repeat the op",
+                     "It answers `{state, was, woke, through}`",
                      "set up with no passcode", "an https link only, of at most 4096 characters",
                      "`$API/sessions/SID/op` with the API key", "answers a locked phone with 502 and no code"):
             self.assertIn(rule, api)

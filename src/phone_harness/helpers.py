@@ -559,8 +559,9 @@ def home():
 
 def wake():
     """Wake a cloud iPhone that is asleep, on its lock screen or showing the
-    StandBy clock, and get it past the lock screen. Returns the state it is
-    left in: 'ready' when it worked. It never enters a passcode; a cloud
+    StandBy clock, and get it past the lock screen. Returns {state, was, woke,
+    through}: `state` is 'ready' when the phone takes input, and `woke` is
+    False when it was already awake. It never enters a passcode; a cloud
     iPhone is set up without one. Cloud iPhones only."""
     if not phone.supports("device.wake"):
         raise transport.Unsupported("cloud iPhones only: wake() needs a cloud iPhone whose host can wake it. "
