@@ -59,11 +59,12 @@ session started with. It answers `{device, orientation, turned, lock}`:
 drawn, which stays `"portrait"` when what is in front supports only one way
 up. If iOS's Portrait Orientation Lock is on, the turn switches it off first,
 because a phone with it on does not turn. That goes through Settings and
-takes about a minute, so allow the request two or three, and expect the phone
-on its Home Screen afterwards. The lock then stays off until a turn back to
-portrait, which puts it on again. `lock` is `"off"` or `"on"` when the call
-changed the lock, else null. A turn is refused with 409 on a phone at its
-lock screen.
+takes about a minute, so allow the request that long, and expect the phone on
+its Home Screen afterwards. If the request answers 502 first, the phone may
+still be turning: wait a minute and read the screen before asking again. The
+lock then stays off until a turn back to portrait, which puts it on again.
+`lock` is `"off"` or `"on"` when the call changed the lock, else null. A turn
+is refused with 409 on a phone at its lock screen.
 
 The same `{"op", "kw"}` body can be posted to `$API/sessions/SID/op` with the
 API key in place of the control token; the MCP server drives a phone that way.

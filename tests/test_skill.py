@@ -147,6 +147,8 @@ class SkillOutput(unittest.TestCase):
                 "open the app again afterwards",
                 "The lock then stays off until a turn back to portrait, which puts it on again",
                 "`lock` is `'off'` or `'on'` when the call changed the lock",
+                "A turn that does not come back may still be going, and the error says so",
+                "look at `screenshot()` before calling `rotate()` again",
                 "A turn is refused on a phone at its lock screen (`wake()` first)",
                 "Check `supports('device.rotate')` first",
                 "| `device.rotate` | `to` | `{device, orientation, turned, lock}`."):
@@ -160,7 +162,8 @@ class SkillOutput(unittest.TestCase):
                      "`screen.bounds` can still answer the size the session started with",
                      "It answers `{device, orientation, turned, lock}`",
                      "If iOS's Portrait Orientation Lock is on, the turn switches it off first",
-                     "takes about a minute, so allow the request two or three",
+                     "takes about a minute, so allow the request that long",
+                     "If the request answers 502 first, the phone may still be turning",
                      "The lock then stays off until a turn back to portrait, which puts it on again",
                      "`device.wake`, `device.rotate` and `url.open`"):
             self.assertIn(rule, api)

@@ -346,9 +346,11 @@ it on does not turn. That goes through Settings: it takes about a minute and
 leaves the phone on its Home Screen, so open the app again afterwards. The
 lock then stays off until a turn back to portrait, which puts it on again.
 `lock` is `'off'` or `'on'` when the call changed the lock, else `None`. A
-turn is refused on a phone at its lock screen (`wake()` first). Check
-`supports('device.rotate')` first; a host that cannot turn a phone lists no
-such op.
+turn that does not come back may still be going, and the error says so: wait
+a minute and look at `screenshot()` before calling `rotate()` again, or a
+second turn runs under the first. A turn is refused on a phone at its lock
+screen (`wake()` first). Check `supports('device.rotate')` first; a host that
+cannot turn a phone lists no such op.
 
 The client posts `{"op", "kw"}` to `<control url>/op` and reads the host's
 list from `GET <control url>/ops` (`remote.py`). `supports(op)` is that list.

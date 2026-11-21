@@ -22,7 +22,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from phone_harness import transport  # noqa: E402
-from phone_harness.remote import Remote  # noqa: E402
+from phone_harness.remote import LOCKED, STILL_TURNING, Remote  # noqa: E402
 from phone_harness.transport import Unsupported  # noqa: E402
 
 TALL, WIDE = {"x": 0, "y": 0, "w": 750, "h": 1334, "id": "udid1"}, {"x": 0, "y": 0, "w": 1334, "h": 750, "id": "udid1"}
@@ -35,6 +35,8 @@ class Control(BaseHTTPRequestHandler):
     app_turns = True        # False: the app in front supports one way up and stays upright
     upright_lock = False    # iOS's Portrait Orientation Lock
     unlocked_by_a_turn = False   # the host's note that a turn switched the lock off
+    gave_up = None          # set: what the gateway answers a turn it stopped waiting for
+    locked = False          # the phone shows its lock screen
     at_home = False         # on the Home Screen, where changing the lock leaves the phone
     calls = []
 
@@ -61,6 +63,11 @@ class Control(BaseHTTPRequestHandler):
             op, kw = body["op"], body.get("kw") or {}
             if op not in Control.ops:
                 return self._send(400, {"error": f"this phone cannot {op!r}", "unsupported": True})
+            if op == "device.rotate" and Control.gave_up:
+                return self._send(*Control.gave_up)
+            if op == "device.rotate" and Control.locked:
+                return self._send(409, {"error": "The iPhone is locked. Unlock it on the phone, then retry; "
+                                                 "the host never enters a passcode."})
             if op == "device.rotate":
                 if set(kw) != {"to"} or kw["to"] not in ("portrait", "landscape_left", "landscape_right"):
                     return self._send(400, {"error": "to must be portrait, landscape_left or landscape_right"})
@@ -79,7 +86,9 @@ class Control(BaseHTTPRequestHandler):
                 return self._send(200, {"result": {"device": kw["to"], "turned": turned, "orientation": drawn,
                                                    "lock": lock}})
             if op == "session.state":
-                return self._send(200, {"result": "ready"})
+                return self._send(200, {"result": "locked" if Control.locked else "ready"})
+            if op == "input.slow":
+                return self._send(502, {"error": "could not reach the phone"})
             if op == "screen.capture":
                 wide = Control.orientation != "portrait" and Control.app_turns
                 return self._send(200, {"result": {"png_b64": "", "bounds": WIDE if wide else TALL}})
@@ -95,7 +104,8 @@ class TurningACloudIphone(unittest.TestCase):
     def setUp(self):
         Control.ops = ("screen.bounds", "screen.capture", "session.state", "input.tap", "device.rotate", "device.wake")
         Control.orientation, Control.app_turns, Control.upright_lock, Control.calls = "portrait", True, False, []
-        Control.at_home = Control.unlocked_by_a_turn = False
+        Control.at_home = Control.unlocked_by_a_turn = Control.locked = False
+        Control.gave_up = None
         server = ThreadingHTTPServer(("127.0.0.1", 0), Control)
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -163,6 +173,51 @@ class TurningACloudIphone(unittest.TestCase):
         self.remote.send("device.rotate", to="landscape_left")
         self.remote.send("input.tap", x=1, y=2)
         self.assertEqual(waits, {"device.rotate": 200, "input.tap": 60})
+
+    def test_a_turn_that_does_not_come_back_says_it_may_still_be_going(self):
+        """The gateway in front of the control URL waits 70 s for the host and then
+        answers 502. The host carries on, so a second turn asked for at once would
+        run under the first."""
+        for gave_up in ((502, {"error": "could not reach the phone"}), (504, {"error": "gateway timeout"})):
+            Control.gave_up = gave_up
+            with self.subTest(status=gave_up[0]), self.assertRaises(RuntimeError) as raised:
+                self.remote.send("device.rotate", to="landscape_left")
+            self.assertEqual(str(raised.exception), f"{gave_up[1]['error']}. {STILL_TURNING}")
+        self.assertIn("may still be going", STILL_TURNING)
+        self.assertIn("look at screenshot() before calling rotate() again", STILL_TURNING)
+
+    def test_a_refusal_is_not_taken_for_a_turn_still_going(self):
+        Control.gave_up = (400, {"error": "to is one of: portrait, landscape_left, landscape_right"})
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("device.rotate", to="landscape_left")
+        self.assertNotIn("may still be going", str(raised.exception))
+        Control.gave_up, Control.locked = None, True
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("device.rotate", to="landscape_left")
+        self.assertEqual(str(raised.exception), LOCKED)          # a phone at its lock screen: wake() first
+
+    def test_another_op_that_does_not_come_back_says_nothing_about_a_turn(self):
+        Control.ops = Control.ops + ("input.slow",)
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("input.slow")
+        self.assertEqual(str(raised.exception), "could not reach the phone")
+
+    def test_a_turn_this_client_stopped_waiting_for_says_so_too(self):
+        def no_answer(method, path, body=None, timeout=60):
+            raise RuntimeError("could not reach the cloud phone: timed out")
+        self.remote.supports("device.rotate")           # the host's list is read before the wire goes quiet
+        self.remote._call = no_answer
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("device.rotate", to="portrait")
+        self.assertEqual(str(raised.exception), f"could not reach the cloud phone: timed out. {STILL_TURNING}")
+
+    def test_a_session_that_is_gone_is_said_as_it_is(self):
+        self.remote.supports("device.rotate")
+        self.remote.token = "expired"                   # the stand-in answers 404 to a token it does not know
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("device.rotate", to="portrait")
+        self.assertIn("session is gone", str(raised.exception))
+        self.assertNotIn("may still be going", str(raised.exception))
 
     def test_a_host_that_cannot_turn_a_phone_is_unsupported_and_is_sent_nothing(self):
         Control.ops = ("screen.bounds", "input.tap", "device.wake", "session.state")
