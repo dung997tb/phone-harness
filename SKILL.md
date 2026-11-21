@@ -47,6 +47,7 @@ no hardware and is always the fallback.
 - `press(combo)` - Press a key, such as `press("enter")`.
 - `open_app(name)` - Launch an app and return the app id that launched.
 - `open_url(url)` - Open an https link in the phone's browser, whole. Cloud phones only for now.
+- `wake()` - Wake a cloud iPhone that is asleep or on its lock screen. No passcode is typed. Cloud iPhones only.
 - `push_file(path)` - Send a file to the phone; it opens in the phone's browser under its own name. Cloud phones only for now.
 - `swipe(direction, distance=0.4, at=None)` - Flick. `direction` is finger motion: `"up"`, `"down"`, `"left"`, or `"right"`.
 - `scroll(direction="down", amount=0.3, at=None)` - Scroll. `direction` is the content to reveal: `"down"`, `"up"`, `"left"`, or `"right"`.
@@ -310,6 +311,19 @@ cloud phone.
 
 The mirroring section describes a Mac window. This phone is the HTTPS path.
 
+**Asleep or locked.** A cloud iPhone that has been left alone goes to sleep.
+It may then show its lock screen, or the StandBy clock (a large clock or
+widgets, sideways). `screenshot()` and `screen()` still work, so look when
+unsure. Taps, typing, `open_app` and `open_url` are refused while it is
+locked: `the cloud iPhone is locked or asleep. Call wake() ...`. Call
+`wake()` and run the step again. It returns the state the phone is left in,
+`'ready'` when it worked. These phones are set up with no passcode: never ask
+the user for one, and nothing here types one. If `wake()` leaves the phone
+locked, a passcode has been set on it; tell the user. Check
+`supports('device.wake')` first; an older host lists no such op, and its
+refusal is `The iPhone is locked. Unlock it on the phone ...`. There,
+`home()` is the one thing to try.
+
 The client posts `{"op", "kw"}` to `<control url>/op` and reads the host's
 list from `GET <control url>/ops` (`remote.py`). `supports(op)` is that list.
 `send` of an op the host did not list raises `Unsupported` before the POST
@@ -334,6 +348,7 @@ documents or decodes.
 | `apps.launch` | `name`, `fresh` | app id. Timeout 90s. |
 | `apps.current` | | app id or None |
 | `apps.list` | `include_system` | `[app id]`. Timeout 90s. |
+| `device.wake` | | state string, `'ready'` when the phone is awake. Wakes a phone that is asleep or on its lock screen. Never types a passcode. |
 | `session.state` | | backend-defined string; `'ready'` when usable |
 | `session.require` | | bounds, or raise telling the user what to do |
 | `session.refocus` | | `None` here. The client does not call the host. |
