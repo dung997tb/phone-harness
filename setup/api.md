@@ -40,8 +40,9 @@ curl -s -H "$C" -H 'Content-Type: application/json' \
 
 A cloud iPhone that has been left alone goes to sleep: its screen is off, or
 shows the lock screen or the StandBy clock. On the lock screen and in StandBy,
-taps, typing, `apps.launch` and `url.open` answer 409 with `"code": "locked"`.
-Send `device.wake` and repeat the op. It answers `{state, was, woke, through}`.
+taps, typing, `apps.launch` and `url.open` answer 409 (`The iPhone is locked.
+...`), and `session.state` answers `"locked"` or `"standby"`. Send
+`device.wake` and repeat the op. It answers `{state, was, woke, through}`.
 These phones are set up with no passcode: there is none to send, and none to
 ask the user for.
 `url.open` takes an https link only, of at most 4096 characters, with no

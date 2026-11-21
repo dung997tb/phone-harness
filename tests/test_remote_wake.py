@@ -4,6 +4,11 @@ A cloud iPhone left alone goes to sleep, and its host then refuses to touch
 it. The host's own sentence says to unlock it on the phone, which nobody
 driving a cloud phone can do. Where the host can wake the phone, the helpers
 say to call wake() instead. The control host here is a stand-in; no cloud.
+
+The stand-in answers as the control URL does in production: phone-cloud's
+gateway forwards the op to the host and passes back the host's sentence
+without its `code` (iphone_gate._interpret). `Control.code` set true is the
+host answering directly, code and all.
 """
 import json
 import sys
@@ -20,8 +25,9 @@ from phone_harness import transport  # noqa: E402
 from phone_harness.remote import LOCKED, Remote  # noqa: E402
 from phone_harness.transport import Unsupported  # noqa: E402
 
-# What phone-host answers while an iPhone shows its lock screen.
+# What phone-host answers while an iPhone shows its lock screen, and StandBy.
 HOST_LOCKED = "The iPhone is locked. Unlock it on the phone, then retry; the host never enters a passcode."
+HOST_STANDBY = "The iPhone is in StandBy, which takes no input. Call device.wake (Wake in the preview), then retry."
 GATED = ("input.tap", "input.text", "apps.launch", "url.open", "session.require")
 
 
@@ -29,7 +35,9 @@ class Control(BaseHTTPRequestHandler):
     """A phone's control URL: /ops and /op, as phone-host serves them."""
     ops = ()            # what GET /ops lists
     locked = False      # the phone shows its lock screen
+    standby = False     # the phone shows StandBy
     passcode = False    # a passcode was set, so a wake leaves it locked
+    code = False        # True: the host's `code` reaches the client; False: the gateway dropped it
     calls = []          # every body POSTed to /op
     gets = 0            # how many times /ops was read
 
@@ -57,16 +65,22 @@ class Control(BaseHTTPRequestHandler):
             op = body["op"]
             if op not in Control.ops:
                 return self._send(400, {"error": f"this phone cannot {op!r}", "unsupported": True})
+            state = "locked" if Control.locked else "standby" if Control.standby else "ready"
+            if op == "session.state":
+                return self._send(200, {"result": state})
             if op == "device.wake":
                 # phone-host's answer: where it left the phone, where it found it, and whether it pressed anything.
-                was = "locked" if Control.locked else "ready"
+                Control.standby = False
                 if not Control.passcode:
                     Control.locked = False
-                woke = was != "ready"
-                return self._send(200, {"result": {"state": "locked" if Control.locked else "ready", "was": was,
+                woke = state != "ready"
+                return self._send(200, {"result": {"state": "locked" if Control.locked else "ready", "was": state,
                                                    "woke": woke, "through": "home" if woke else None}})
-            if Control.locked and op in GATED:
-                return self._send(409, {"error": HOST_LOCKED, "code": "locked"})
+            if state != "ready" and op in GATED:
+                refusal = {"error": HOST_LOCKED if Control.locked else HOST_STANDBY}
+                if Control.code:
+                    refusal["code"] = "locked"
+                return self._send(409, refusal)
             if op == "input.busy":
                 return self._send(409, {"error": "the phone is busy with another operation"})
             return self._send(200, {"result": True})
@@ -76,12 +90,13 @@ class Control(BaseHTTPRequestHandler):
 
 
 class WakingACloudIphone(unittest.TestCase):
-    NEW = ("input.tap", "input.text", "apps.launch", "url.open", "session.require", "nav.home", "device.wake",
-           "input.busy")
+    NEW = ("input.tap", "input.text", "apps.launch", "url.open", "session.require", "session.state", "nav.home",
+           "device.wake", "input.busy")
     OLD = tuple(op for op in NEW if op != "device.wake")
 
     def setUp(self):
-        Control.ops, Control.locked, Control.passcode, Control.calls, Control.gets = self.NEW, False, False, [], 0
+        Control.ops, Control.locked, Control.standby, Control.passcode = self.NEW, False, False, False
+        Control.code, Control.calls, Control.gets = False, [], 0
         server = ThreadingHTTPServer(("127.0.0.1", 0), Control)
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -117,6 +132,26 @@ class WakingACloudIphone(unittest.TestCase):
         self.assertIn("no passcode", LOCKED)
         self.assertNotIn("Unlock it on the phone", LOCKED)
 
+    def test_standby_is_refused_the_same_way(self):
+        Control.standby = True
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("apps.launch", name="Notes")
+        self.assertEqual(str(raised.exception), LOCKED)
+
+    def test_the_refusal_is_settled_by_asking_the_phone_its_state_once(self):
+        """The gateway passes on the host's sentence without its code, so the phone is asked."""
+        Control.locked = True
+        with self.assertRaises(RuntimeError):
+            self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual([c["op"] for c in Control.calls], ["input.tap", "session.state"])
+
+    def test_the_hosts_own_code_settles_it_without_asking(self):
+        Control.locked = Control.code = True
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual(str(raised.exception), LOCKED)
+        self.assertEqual([c["op"] for c in Control.calls], ["input.tap"])
+
     def test_locked_then_woken_then_the_tap_lands(self):
         Control.locked = True
         with self.assertRaises(RuntimeError):
@@ -128,6 +163,9 @@ class WakingACloudIphone(unittest.TestCase):
         Control.locked = Control.passcode = True
         self.assertEqual(self.remote.send("device.wake")["state"], "locked")
         self.assertEqual([c["op"] for c in Control.calls], ["device.wake"])
+        with self.assertRaises(RuntimeError) as raised:        # and the next tap says what it always says
+            self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual(str(raised.exception), LOCKED)
 
     def test_a_host_that_cannot_wake_keeps_its_own_sentence(self):
         """Telling someone to call a helper their phone's host does not have would send them in a circle."""
@@ -145,12 +183,21 @@ class WakingACloudIphone(unittest.TestCase):
         with self.assertRaises(RuntimeError) as raised:
             self.remote.send("input.busy")
         self.assertEqual(str(raised.exception), "the phone is busy with another operation")
+        self.assertEqual([c["op"] for c in Control.calls], ["input.busy", "session.state"])   # asked, and it was ready
 
-    def test_wording_the_refusal_asks_the_host_nothing_more(self):
-        Control.locked = True
+    def test_a_host_that_cannot_wake_is_asked_nothing_more(self):
+        Control.ops, Control.locked = self.OLD, True
         with self.assertRaises(RuntimeError):
             self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual([c["op"] for c in Control.calls], ["input.tap"])
         self.assertEqual(Control.gets, 1)           # the one read of /ops that every first op makes
+
+    def test_a_state_that_cannot_be_read_leaves_the_hosts_sentence(self):
+        Control.ops = tuple(op for op in self.NEW if op != "session.state")
+        Control.locked = True
+        with self.assertRaises(RuntimeError) as raised:
+            self.remote.send("input.tap", x=1, y=2)
+        self.assertEqual(str(raised.exception), HOST_LOCKED)
 
 
 class TheWakeHelper(unittest.TestCase):
